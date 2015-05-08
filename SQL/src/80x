@@ -1,0 +1,293 @@
+select * from HDBMS15.MEGOLDASAIM;
+
+begin
+HDBMS15.megoldas_feltolt(603, '
+create or replace PROCEDURE t_p_felh(nev varchar2 := user) is
+CURSOR cur_tables(nev1 varchar2) is
+select table_name from ALL_TABLES where owner = nev1;
+CURSOR cur_view(nev1 varchar2) is
+  select view_name from ALL_VIEWS where owner = nev1;
+CURSOR cur_procedure(nev1 varchar2) is
+  select object_name from all_objects
+where object_type = ''PROCEDURE'' and owner = nev1;
+Cursor cur_function(nev1 varchar2) is
+  select object_name from all_objects where object_type = ''FUNCTION'' and owner = nev1;
+Cursor cur_sequence(nev1 varchar2) is
+  select object_name from ALL_OBJECTS where OBJECT_TYPE=''SEQUENCE'' and owner = nev1;
+temp varchar2(50);
+begin
+
+select username into temp from ALL_USERS where USERNAME = nev;
+
+
+DBMS_OUTPUT.put_line(''Táblák:'');
+OPEN cur_tables(cur_nev);
+loop
+  Fetch cur_tables into temp;
+  EXIT WHEN cur_tables%NOTFOUND;
+  DBMS_OUTPUT.PUT_LINE(temp);
+end loop;
+DBMS_OUTPUT.PUT_LINE(''Tábla darabszáma: ''||cur_tables%rowcount);
+close cur_tables;
+
+
+DBMS_OUTPUT.put_line(''Nézetek:'');
+OPEN cur_view(cur_nev);
+loop
+  Fetch cur_view into temp;
+  EXIT WHEN cur_view%NOTFOUND;
+  DBMS_OUTPUT.PUT_LINE(temp);
+end loop;
+DBMS_OUTPUT.PUT_LINE(''Nézetek darabszáma: ''||cur_view%ROWCOUNT);
+close cur_view;
+
+DBMS_OUTPUT.put_line(''Eljárások:'');
+OPEN cur_procedure(cur_nev);
+loop
+  Fetch cur_procedure into temp;
+  EXIT WHEN cur_procedure%NOTFOUND;
+  DBMS_OUTPUT.PUT_LINE(temp);
+end loop;
+DBMS_OUTPUT.PUT_LINE(''Eljárások száma: ''||cur_procedure%rowcount);
+close cur_procedure;
+
+DBMS_OUTPUT.put_line(''Függvények:'');
+OPEN cur_function(cur_nev);
+loop
+  Fetch cur_function into temp;
+  EXIT WHEN cur_function%NOTFOUND;
+  DBMS_OUTPUT.PUT_LINE(temp);
+end loop;
+DBMS_OUTPUT.PUT_LINE(''Függvények száma: ''||cur_function%rowcount);
+close cur_function;
+
+DBMS_OUTPUT.put_line(''Seqvenciák:'');
+OPEN cur_sequence(cur_nev);
+loop
+  Fetch cur_sequence into temp;
+  EXIT WHEN cur_sequence%NOTFOUND;
+  DBMS_OUTPUT.PUT_LINE(temp);
+end loop;
+DBMS_OUTPUT.PUT_LINE(''Seqvenciák száma: ''||cur_sequence%rowcount);
+close cur_sequence;
+
+exception
+when no_data_found
+then RAISE_APPLICATION_ERROR(-20001, ''Nincs ilyen felhasználó ''||nev);
+
+
+end;/');
+end;
+
+
+
+
+
+
+----801----
+select * from HDBMS15.FELADATAIM where azon = 801;
+
+--Írj blokkot, amely explicit kurzor segítségével sorban kilistázza egy adott (Te válaszd ki) raktár
+--(warehouse) által tárolt termékek (product) nevét, és azt, hogy hány darab van a raktáron.
+
+BEGIN
+HDBMS15.MEGOLDAS_FELTOLT(801,'
+declare
+nev VARCHAR2(50);
+db NUMBER;
+cursor product is select PRODUCT_NAME, quantity_on_hand from OE.PRODUCT_INFORMATION pi
+inner join OE.INVENTORIES inv on (pi.product_id=inv.product_id)
+where inv.warehouse_id = 1;
+begin
+open product;
+loop 
+Fetch product into nev, db;
+Exit when product%NOTFOUND;
+DBMS_OUTPUT.PUT_LINE(nev||'' ''||db);
+end loop;
+end;/');
+END;
+
+select PRODUCT_NAME, quantity_on_hand from OE.PRODUCT_INFORMATION pi
+inner join OE.INVENTORIES inv on (pi.product_id=inv.product_id)
+where inv.warehouse_id = 1;
+
+select * from OE.WAREHOUSES;
+
+
+----802----
+select * from HDBMS15.FELADATAIM where azon = 802;
+--Írj tárolt eljárást, amely paraméterként kapott raktár minden olyan terméke esetén, 
+--amely csak az adott raktárban van, megemeli a termék árát 10%-kal.
+--A megoldásban explicit kurzort használj, for update, és current of utasításrészekkel.
+
+BEGIN
+HDBMS15.Megoldas_FELTOLT(802, '
+CREATE OR REPLACE PROCEDURE T_P_RAKTARAREMEL(RAK_NEV VARCHAR2) IS 
+cursor egyeditermek is select product_id from OE.INVENTORIES where 
+  WAREHOUSE_ID = (SELECT WAREHOUSE_ID FROM OE.WAREHOUSES WHERE WAREHOUSE_NAME = rak_nev)
+  for update;
+temp number;
+temp2 number;
+BEGIN
+open egyeditermek;
+loop
+  fetch egyeditermek into temp;
+  exit when egyeditermek%notfound;
+  select count(*) into temp2 from OE.INVENTORIES where product_ID=temp and 
+  WAREHOUSE_ID <> (SELECT WAREHOUSE_ID FROM OE.WAREHOUSES WHERE WAREHOUSE_NAME = rak_nev);
+  if temp2 = 0 then 
+  update product_information set list_price = list_price * 1.10 where current of egyeditermek;
+  end if;
+
+end loop;
+close egyeditermek;
+END;
+/');
+end;
+
+
+SELECT product_id FROM OE.INVENTORIES
+WHERE WAREHOUSE_ID not in (SELECT WAREHOUSE_ID FROM OE.WAREHOUSES WHERE WAREHOUSE_NAME = 'Beijing')
+group by PRODUCT_ID
+having count(*) = 0;
+
+
+-----803 ---
+select * from HDBMS15.FELADATAIM where azon = 803;
+--Írj blokkot, amely meghívja az előző feladat tárolt eljárását, és ne feledd lezárni a tranzakciót.
+
+begin
+HDBMS15.MEGOLDAS_FELTOLT(803, '
+begin
+  T_P_RAKTARAREMEL(''Beijing'');
+  commit;
+end;/');
+end;
+
+----804------
+select * from HDBMS15.FELADATAIM where azon = 804;
+
+--Hozz létre táblát konyvek néven, amelyben könyveknek az ISBN számát, címét, és kiadóját és a kiadás évét tároljuk.
+--A tábla elsődleges kulcsa az ISBN legyen. 
+--Hozzunk létre táblát példány néven, melyben a könyv raktári számát és az ISBN számát tároljuk.
+--A tábla elsődleges kulcsa a raktári szám legyen, az ISBN hivatkozzon a konyv tábla elsődleges kulcsára.
+
+DROP TABLE KONYVEK;
+DROP TABLE PELDANY;
+
+BEGIN
+HDBMS15.MEGOLDAS_FELTOLT(804, '
+CREATE TABLE KONYVEK (
+ISBN NUMBER(13),
+CIM VARCHAR2(50),
+KIADO VARCHAR2(50),
+KIADAS_EVE NUMBER(4),
+CONSTRAINT KONYVEK_PRIMARY_KEY PRIMARY KEY (ISBN)
+);/
+
+CREATE TABLE PELDANY(
+RAKTARI_SZAM NUMBER,
+ISBN NUMBER(13),
+CONSTRAINT PELDANY_PRIMARY_KEY PRIMARY KEY (RAKTARI_SZAM),
+CONSTRAINT PELDANY_FOREIGN_KEY FOREIGN KEY (ISBN) REFERENCES KONYVEK(ISBN)
+);/');
+END;
+
+
+----805----
+select * from HDBMS15.FELADATAIM where azon = 805;
+
+--Hozzunk létre csomagot, amelynek a segítségével az előző feladat két tábláját használni tudjuk. 
+--A csomag tartalmazzon egy beszur_konyv nevű publikus eljárást, egy töröl könyv nevű publikus függvényt, 
+--egy listáz nevű publikus eljárást, és nincs_ilyen_konyv, nem_megfelelo_konyv, letezo_raktari_szam nevű kivételeket. 
+
+--A beszur_konyv nevű eljárás paraméterként kapjon ISBN, cím, kiadó, kiadás éve, raktári szám értékeket. 
+
+--Először a könyv táblába próbáljon beszúrni, ha ott a könyv megtalálható, és az értékek megfelelnek, 
+--akkor örülünk, ha nem felelnek meg az értékek, akkor a nem_megfelelo_konyv kivételt dobjuk, ha nincs ilyen könyv,
+--akkor beszúrjuk.
+
+--Majd a megfelelő értékeket beszúrjuk a példány táblába. Ha az adott raktári számon már létezik a könyv,
+--akkor dobjunk letezo_raktari_szam kivetelt.
+
+--A töröl könyv nevű függvény paraméterként egy raktári számot kapjon,
+--és törölje ki csak a példány táblából az adott könyvet, majd visszatérési értékként adja vissza, 
+--hogy hány példány van még a kitörölt könyvből ugyanazzal az ISBN számmal.
+
+--Ha a raktári szám nem létezik, 
+--akkor ne történjen semmi. 
+
+--A listáz nevű eljáráshoz definiáljunk egy privát kurzort, amely paraméterként kapott ISBN számhoz listázza a raktári számokat,
+--a könyv címeket, a könyv kiadókat és a kiadás évét. 
+
+--Az eljárás megnyitja a kurzort, ha még nincs nyitva, egy sort felolvas, 
+--majd paraméterként visszaadja az eredményeket. (Ezt egy publikus rekortípusban tegyük meg.)
+--Ha a kurzorban nem találnuk több sort, akkor null értéket adjunk vissza. Ha nem talál ilyen ISBN számú könyvet, akkor nincs ilyen könyv kivételt dob.
+
+CREATE OR REPLACE PACKAGE MY_FIRST_PACKAGE IS 
+TYPE record_type is RECORD (raktariszam number, konyv_cim varchar2(50), konyv_kiado varchar2(50), kiadas_eve number);
+NINCS_ILYEN_KONYV EXCEPTION;
+NEM_MEGFELELO_KONYV EXCEPTION;
+PRAGMA EXCEPTION_INIT(NEM_MEGFELELO_KONYV, -20011);
+NEM_LETEZO_RAKTARI_SZAM EXCEPTION;
+PRAGMA EXCEPTION_INIT(NEM_LETEZO_RAKTARI_SZAM, -20012);
+PROCEDURE BESZUR_KONYV(P_ISBN NUMBER,P_CIM VARCHAR2, P_KIADO VARCHAR2, P_KIADAS_EVE NUMBER, P_RAKTARI_SZAM NUMBER) is
+begin
+begin
+INSERT INTO KONYVEK (ISBN, CIM, KIADO, KIADAS_EVE) 
+VALUES (P_ISBN, P_CIM, P_KIADO, P_KIADAS_EVE);
+exception
+when DUP_VAL_ON_INDEX then
+  RAISE NEM_MEGFELELO_KONYV;
+end;
+begin
+  Insert Into pelydany(RAKTARI_SZAM, ISBN) values (p_raktari_szam, p_isbn);
+exception
+when DUP_VALUE_ON_INDEX then
+  RAISE NEM_LETEZO_RAKTARI_SZAM;
+end;
+end;
+FUNCTION TOROL_KONYV(F_RAKTARI_SZAM) return number is 
+RET number;
+TEMP_ISBN NUMBER;
+begin
+ delete from peldany where RAKTARI_SZAM = F_RAKTARI_SZAM RETURNING ISBN INTO TEMP_ISBN;
+  SELECT COUNT(*) INTO RET FROM PELDANY WHERE ISBN = TEMP_ISBN;
+  RETURN RET;
+end;
+PROCEDURE LISTAZ;
+END MY_FIRST_PACKAGE;
+
+CREATE OR REPLACE PACKAGE BODY MY_FIRST_PACKAGE IS 
+cursor c1 return record_type is select 
+begin
+
+end;
+end MY_FIRST_PACKAGE;
+
+
+ALTER PACKAGE MY_FIRST_PACKAGE COMPILE BODY;
+DROP PACKAGE [BODY] csomagnév;
+
+BEGIN
+INSERT INTO KONYVEK (ISBN, CIM, KIADO, KIADAS_EVE) 
+VALUES (123123123123, 'VUKk', 'KISKAPU', 1994);
+INSERT INTO PELDANY (RAKTARI_SZAM, ISBN) VALUES (1, 123123123123);
+exception
+when DUP_VAL_ON_INDEX then
+dbms_output.put_line(SQLCODE||sqlERRM);
+END;
+DELETE FROM KONYVEK WHERE ISBN = 123123123123;
+
+
+DECLARE
+TEMP_ISBN NUMBER;
+begin
+  
+ delete from peldany where RAKTARI_SZAM = 1 RETURNING ISBN INTO TEMP_ISBN;
+  
+  EXCEPTION
+  WHEN NO_DATA_FOUND
+  THEN DBMS_OUTPUT.PUT_LINE('NO');
+end;

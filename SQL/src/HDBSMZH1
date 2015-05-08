@@ -1,0 +1,109 @@
+-----zh1
+create or replace procedure t_p_rendszam(rszam in VARCHAR2, ert out NUMBER, dat out date) is
+temp number;
+begin
+
+begin
+select azon into temp from szerelo.auto where rendszam = rszam;
+exception 
+when NO_DATA_FOUND
+then return;
+end;
+
+begin
+select ertek, datum into ert, dat from szerelo.autofelertekeles
+  where auto_azon=(select azon from szerelo.auto where rendszam=rszam)
+  and datum = (select max(datum) from szerelo.autofelertekeles
+                where auto_azon=(select azon from szerelo.auto where rendszam=rszam));
+exception
+when no_data_found
+then 
+  select elso_vasarlas_idopontja, elso_vasarlasi_ar into dat, ert from szerelo.auto where rendszam=rszam;
+when too_many_rows
+then
+  RAISE_APPLICATION_ERROR(-20010, 'Nem egyértelm? felértékelési dátum');
+end;
+
+end;
+
+select * from szerelo.auto where rendszam='OPT001';
+
+
+select ertek, datum from szerelo.autofelertekeles
+  where auto_azon=(select azon from szerelo.auto where rendszam='OPT001')
+  and datum = (select max(datum) from szerelo.autofelertekeles
+                where auto_azon=(select azon from szerelo.auto where rendszam='OPT001'));
+  
+select * from szerelo.auto;
+
+---zh2
+drop table utolso_felertekeles;
+
+create table utolso_felertekeles (
+rendszam varchar2(6),
+felertekeles_erteke number,
+felertekeles_datuma date,
+kivetel varchar2(1000),
+constraint p_ut_fel primary key(rendszam));
+
+
+---zh3
+
+declare
+user_exc EXCEPTION;
+PRAGMA EXCEPTION_INIT(user_exc, -20010);
+TYPE rekord IS RECORD (feldolg number, kivetel number);
+r2 rekord;
+hiba varchar2(100);
+function visszaad(mark varchar2) return rekord is
+rek rekord;
+rszam varchar2(50);
+ertek number;
+d date;
+begin
+rek.feldolg := 0;
+rek.kivetel := 0;
+delete from utolso_felertekeles;
+
+for i in (select rendszam from szerelo.auto where tipus_azon in(select azon from szerelo.autotipus where marka like mark))
+loop
+  t_p_rendszam(i.rendszam, ertek, d);
+  insert into utolso_felertekeles (rendszam, felertekeles_erteke, felertekeles_datuma) values (i.rendszam, ertek, d);
+  rek.feldolg := rek.feldolg + 1; 
+end loop;
+commit;
+return rek;
+exception
+  when user_exc
+  then 
+    hiba := SQLERRM;
+    insert into utolso_felertekeles (rendszam, kivetel) values (rszam, hiba);
+    rek.kivetel := rek.kivetel +1 ;
+end;
+begin
+  r2 := visszaad('M%');
+  DBMS_OUTPUT.PUT_LINE(r2.feldolg || ' ' || r2.kivetel);
+end;
+
+select rendszam from szerelo.auto where tipus_azon in(select azon from szerelo.autotipus where marka like 'M%');
+
+---zh4
+declare
+p_ertek SZ_FELERTEKELES.ERTEK%type;
+p_datum sz_felertekeles.datum%type;
+seged sz_felertekeles.ertek%type;
+seged2 SZ_FELERTEKELES.AUTO_AZON%type;
+begin
+
+select auto_azon, ertek into seged, seged2 from SZERELO.SZ_AUTOFELERTEKELES 
+where auto_azon = (select auto_azon from szerelo.sz_auto_tulajdonosa where tulaj_azon= (select azon from SZERELO.SZ_TULAJDONOS where nev = 'Rózsa Attila')) 
+and datum = (select max(datum) from SZERELO.SZ_AUTOFELERTEKELES where auto_azon = 
+            (select auto_azon from szerelo.sz_auto_tulajdonosa where tulaj_azon= (select azon from SZERELO.SZ_TULAJDONOS where nev = 'Rózsa Attila')))
+;
+
+insert into sz_felertekeles (auto_azon, datum, ertek)
+values (seged, sysdate-1,seged2 * 0.80 )
+returning ertek, datum into p_ertek, p_datum; 
+
+dbms_output.put_line(p_ertek || ' ' || to_char(p_datum, 'yyyy.mm.dd hh24:mi:ss'));
+end;
